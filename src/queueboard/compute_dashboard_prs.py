@@ -13,7 +13,7 @@ from dateutil import parser, relativedelta
 from typing import Dict, List, NamedTuple, OrderedDict, Tuple, Any
 
 from queueboard.ci_status import CIStatus
-from queueboard.classify_pr_state import PRState, PRStatus, determine_PR_status, label_categorisation_rules
+from queueboard.classify_pr_state import PRState, PRStatus, canonicalise_label, determine_PR_status, label_categorisation_rules
 from queueboard.mathlib_dashboards import Dashboard, getIdTitle
 from queueboard.util import my_assert_eq, timedelta_tryParse, relativedelta_tryParse
 
@@ -754,6 +754,20 @@ def determine_pr_dashboards(
     foo = [pr for pr in interesting_CI if base_branch[pr.number] == "master"]
     prs_to_list[Dashboard.InessentialCIFails] = prs_without_any_label(foo, other_labels + ["merge-conflict"])
 
+    # Guardrail: if aggregate labels contain forbidden markers that were missing from the open-PR listing,
+    # drop them from the queue and, if applicable, re-add to NeedsMerge.
+    forbidden_for_queue = set(other_labels + ["merge-conflict"])
+    filtered_queue: List[BasicPRInformation] = []
+    extra_needs_merge: List[BasicPRInformation] = []
+    for pr in queue_prs:
+        agg_labels = {canonicalise_label(label.name).lower() for label in aggregate_info[pr.number].labels}
+        if agg_labels & forbidden_for_queue:
+            if "merge-conflict" in agg_labels:
+                extra_needs_merge.append(pr)
+            continue
+        filtered_queue.append(pr)
+    queue_prs = filtered_queue
+
     queue: List[BasicPRInformation]
     if use_aggregate_queue:
         queue = queue_prs
@@ -774,6 +788,12 @@ def determine_pr_dashboards(
         except FileNotFoundError:
             print("warning: queue.json not found; falling back to aggregate-derived queue", file=sys.stderr)
             queue = queue_prs
+
+    if extra_needs_merge:
+        existing = {pr.number for pr in prs_to_list[Dashboard.NeedsMerge]}
+        for pr in extra_needs_merge:
+            if pr.number not in existing:
+                prs_to_list[Dashboard.NeedsMerge].append(pr)
 
     prs_to_list[Dashboard.Queue] = queue
     prs_to_list[Dashboard.QueueNewContributor] = prs_with_label(queue, "new-contributor")

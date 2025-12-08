@@ -217,13 +217,14 @@ class QueueboardSnapshotBuilder:
                     if _has_contradictory_labels(label_names_lc):
                         contradictory.append(pr.number)
 
-            on_queue = (
+            on_queue_base = (
                 not pr.is_draft
                 and pr.base_ref_name == repository.default_branch
                 and ci_value == CIStatus.Pass.value
                 and forbidden_labels.isdisjoint(label_names_lc)
             )
-            if on_queue:
+            has_merge_conflict = "merge-conflict" in label_names_lc
+            if on_queue_base and not has_merge_conflict:
                 queue_prs.append(pr.number)
                 if "new-contributor" in label_names_lc:
                     queue_new_contrib.append(pr.number)
@@ -238,7 +239,7 @@ class QueueboardSnapshotBuilder:
 
             if "awaiting-zulip" in label_names_lc:
                 needs_decision.append(pr.number)
-            if "merge-conflict" in label_names_lc and on_queue:
+            if has_merge_conflict and on_queue_base:
                 needs_merge.append(pr.number)
             if ci_value == CIStatus.FailInessential.value and pr.base_ref_name == repository.default_branch and not pr.is_draft:
                 inessential_ci_fails.append(pr.number)

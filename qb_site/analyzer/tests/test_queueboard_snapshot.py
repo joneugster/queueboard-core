@@ -231,6 +231,11 @@ class QueueboardSnapshotBuilderTests(TestCase):
         self.assertTrue(expected_keys.issubset(set(dashboards.keys())))
         self.assertIn(pr_queue.number, dashboards["Queue"])
         self.assertIn(pr_merge_conflict.number, dashboards["NeedsMerge"])
+        self.assertNotIn(
+            pr_merge_conflict.number,
+            dashboards["Queue"],
+            "merge-conflict PRs should be excluded from the review queue",
+        )
         self.assertIn(pr_ready_to_merge.number, dashboards["AllReadyToMerge"])
         self.assertIn(pr_awaiting_zulip.number, dashboards["NeedsDecision"])
         self.assertIn(pr_help.number, dashboards["NeedsHelp"])
